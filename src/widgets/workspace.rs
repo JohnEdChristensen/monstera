@@ -33,7 +33,6 @@ where
 #[derive(Debug, Clone, PartialEq, Default)]
 struct InnerState {
     modifiers: keyboard::Modifiers,
-    positions: Vec<Point>,
 }
 
 impl<'a, Message, Theme, Renderer> Workspace<'a, Message, Theme, Renderer>
@@ -98,6 +97,10 @@ where
         tree::Tag::of::<InnerState>()
     }
 
+    fn state(&self) -> tree::State {
+        tree::State::new(InnerState::default())
+    }
+
     fn size(&self) -> Size<Length> {
         Size {
             width: Length::Shrink,
@@ -144,7 +147,7 @@ where
         let geo = self
             .cache
             .draw(renderer, workspace_layout.bounds().size() * 2., |frame| {
-                println!("drawing!");
+                //println!("drawing!");
                 frame.translate(Vector::new(-self.camera.x, -self.camera.y));
 
                 //// Foreground
@@ -178,6 +181,12 @@ where
         viewport: &Rectangle,
     ) -> event::Status {
         let event_status = event::Status::Ignored;
+
+        // update inner state
+        let inner_state = tree::State::downcast_mut::<InnerState>(&mut tree.state);
+        if let Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) = event {
+            inner_state.modifiers = modifiers
+        }
 
         ////Pass event down to children
         let event_status = self
@@ -225,12 +234,17 @@ where
                 }
                 Event::Mouse(WheelScrolled { delta }) => {
                     if let Some(pan) = &self.pan {
-                        match delta {
-                            ScrollDelta::Lines { x, y } => shell.publish(pan(Vector::new(x, y))),
-                            ScrollDelta::Pixels { x, y } => {
-                                shell.publish(pan(Vector::new(x * 5., y * 5.)))
+                        let offset = match delta {
+                            ScrollDelta::Lines { x, y } => {
+                                if inner_state.modifiers.shift() {
+                                    Vector::new(y * 25., x * 25.)
+                                } else {
+                                    Vector::new(x * 25., y * 25.)
+                                }
                             }
-                        }
+                            ScrollDelta::Pixels { x, y } => Vector::new(x, y),
+                        };
+                        shell.publish(pan(offset))
                     }
                     event::Status::Captured
                 }
