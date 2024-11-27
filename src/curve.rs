@@ -1,11 +1,12 @@
 use iced::{
+    advanced::graphics::geometry,
     widget::canvas::{Frame, Path, Stroke},
     Color, Point,
 };
 
 type RawCurve = Vec<Point>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Curve {
     raw: RawCurve,
     path: Path,
@@ -15,16 +16,16 @@ pub struct Curve {
 
 impl Default for Curve {
     fn default() -> Self {
-        Curve::new(vec![])
+        Curve::new(vec![], Color::WHITE)
     }
 }
 
 impl Curve {
-    pub fn new(raw_curve: Vec<Point>) -> Self {
+    pub fn new(raw_curve: Vec<Point>, color: Color) -> Self {
         Curve {
             path: Self::build_path(&raw_curve),
             raw: raw_curve,
-            color: Color::WHITE,
+            color,
             width: 2.0,
         }
     }
@@ -38,7 +39,10 @@ impl Curve {
         })
     }
 
-    pub fn draw(&self, frame: &mut Frame) {
+    pub fn draw<Renderer>(&self, frame: &mut Frame<Renderer>)
+    where
+        Renderer: geometry::Renderer,
+    {
         frame.stroke(
             &self.path,
             Stroke::default()
@@ -48,7 +52,10 @@ impl Curve {
     }
 
     pub fn create_reduced(&self, factor: usize) -> Self {
-        Self::new(self.raw.chunks(factor).map(|chunk| chunk[0]).collect())
+        Self::new(
+            self.raw.chunks(factor).map(|chunk| chunk[0]).collect(),
+            self.color,
+        )
     }
 
     pub fn push(&mut self, point: Point) {
@@ -62,21 +69,58 @@ pub mod curve_demo {
     use iced::{
         mouse,
         widget::{canvas, column, row, text},
-        Element, Renderer,
+        Element, Renderer, Vector,
     };
 
     use super::*;
 
     #[derive(Default, Debug)]
+    enum Action {
+        #[default]
+        Idle,
+        Drag(Option<Vector>),
+    }
+
+    #[derive(Default, Debug)]
     pub struct State {
+        position: Point,
+        action: Action,
+
         curve: Curve,
         step: usize,
     }
-    pub enum Message {}
+
+    #[derive(Clone)]
+    pub enum Message {
+        Click,
+        Move(Point),
+        Release,
+    }
 
     impl State {
-        pub fn view(&self) -> Element<Message> {
-            column![canvas(self), row![text(format!("steps: {}", self.step))]].into()
+        pub fn view(&self) -> (Point, Element<Message>) {
+            (
+                self.position,
+                iced::widget::mouse_area(column![
+                    canvas(self),
+                    row![text(format!("steps: {}", self.step))]
+                ])
+                .on_press(Message::Click)
+                .on_move(Message::Move)
+                .on_release(Message::Release)
+                .into(),
+            )
+        }
+        pub fn update(&mut self, message: Message) {
+            match message {
+                Message::Click => self.action = Action::Drag(None),
+                Message::Move(point) => match self.action {
+                    Action::Idle => (),
+                    Action::Drag(None) => self.action = Action::Drag(Some(self.position - point)),
+                    Action::Drag(Some(offset)) => self.position = point - offset,
+                },
+                Message::Release => self.action = Action::Idle,
+            }
         }
     }
 
