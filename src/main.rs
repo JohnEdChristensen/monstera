@@ -1,5 +1,5 @@
-use chilly_canvas::world::World;
 use iced::{theme::palette, Theme};
+use monstera::world::World;
 
 pub fn main() -> iced::Result {
     let palette = palette::Palette {
