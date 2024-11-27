@@ -2,16 +2,45 @@ use crate::curve::Curve;
 use crate::widgets::workspace;
 use glam::Vec3;
 use iced::widget::canvas::Cache;
-use iced::widget::{button, column, container, horizontal_space, row, stack, vertical_space};
+use iced::widget::{
+    button, column, container, horizontal_space, radio, row, stack, vertical_space,
+};
 use iced::{Alignment, Length, Vector};
 use iced::{Color, Element, Point, Theme};
 use style::color_button;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum Tool {
-    Pan,
-    Draw,
+    Line,
+    Pen(bool),
+    Erase(bool),
+}
+
+/// unit version of Tool, used for initialize Tool and displaying summarized version of Tool
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+pub enum SelectedTool {
+    Pen,
+    Line,
     Erase,
+}
+
+impl From<SelectedTool> for Tool {
+    fn from(val: SelectedTool) -> Self {
+        match val {
+            SelectedTool::Line => Tool::Line,
+            SelectedTool::Pen => Tool::Pen(false),
+            SelectedTool::Erase => Tool::Erase(false),
+        }
+    }
+}
+impl From<Tool> for SelectedTool {
+    fn from(val: Tool) -> Self {
+        match val {
+            Tool::Line => SelectedTool::Line,
+            Tool::Pen(_) => SelectedTool::Pen,
+            Tool::Erase(_) => SelectedTool::Erase,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -19,9 +48,10 @@ pub enum Message {
     Pan(Vector),
     Zoom(f32),
     Move(Point),
-    MouseUp,
+    MouseUp(Point),
+    MouseDown(Point),
     DemoMessage,
-    SetTool(Tool),
+    SetTool(SelectedTool),
     SetColor(Color),
     Clear,
 }
@@ -42,7 +72,7 @@ impl Default for World {
     fn default() -> Self {
         World {
             camera: Vec3::new(0., 0., 300.),
-            tool: Tool::Pan,
+            tool: Tool::Pen(false),
             curves: vec![],
             cache: Cache::new(),
             colors: vec![
@@ -59,57 +89,66 @@ impl Default for World {
     }
 }
 impl World {
-    pub fn update(world: &mut World, message: Message) {
+    pub fn update(&mut self, message: Message) {
         match message {
             Message::Pan(delta) => {
-                world.camera += Vec3::new(-delta.x * 1.5, -delta.y * 1.5, 0.);
-                world.cache.clear();
+                self.camera += Vec3::new(-delta.x * 1.5, -delta.y * 1.5, 0.);
+                self.cache.clear();
             }
             Message::Zoom(delta) => {
-                world.camera += Vec3::new(0., 0., delta);
-                world.cache.clear();
+                self.camera += Vec3::new(0., 0., delta);
+                self.cache.clear();
             }
 
             //// Building curve
             #[allow(clippy::single_match)]
-            Message::Move(point) => match &mut world.tool {
-                Tool::Draw => {
-                    world
-                        .curves
+            Message::Move(point) => match &mut self.tool {
+                Tool::Pen(true) => {
+                    self.curves
                         .last_mut()
                         .unwrap()
-                        .push(point + Vector::new(world.camera.x, world.camera.y));
-                    world.cache.clear();
+                        .push(point + Vector::new(self.camera.x, self.camera.y));
+                    self.cache.clear();
                 }
                 _ => {}
             },
 
             //// Finish curve
             #[allow(clippy::single_match)]
-            Message::MouseUp => match &mut world.tool {
-                Tool::Draw => {
-                    if let Some(curve) = world.curves.last_mut() {
+            Message::MouseUp(_point) => match &mut self.tool {
+                Tool::Pen(true) => {
+                    if let Some(curve) = self.curves.last_mut() {
                         *curve = curve.create_reduced(3)
                     }
-                    world.cache.clear();
-                    world.tool = Tool::Pan
+                    self.cache.clear();
+                    self.tool = Tool::Pen(false)
                 }
-                _ => world.cache.clear(),
+                Tool::Erase(true) => self.tool = Tool::Erase(false),
+                _ => {}
             },
-            Message::DemoMessage => {}
-            Message::SetTool(tool) => {
-                #[allow(clippy::single_match)]
-                match tool {
-                    Tool::Draw => world.curves.push(Curve::new(vec![], world.active_color)),
-                    _ => {}
+            #[allow(clippy::single_match)]
+            Message::MouseDown(_point) => match &mut self.tool {
+                Tool::Pen(false) => {
+                    self.tool = Tool::Pen(true);
+                    self.curves.push(Curve::new(vec![], self.active_color));
                 }
-                world.tool = tool;
+
+                Tool::Erase(false) => self.tool = Tool::Erase(true),
+                _ => (),
+            },
+            Message::SetTool(tool) => {
+                //#[allow(clippy::single_match)]
+                //match tool {
+                //    Tool::Pen(false) =>                     _ => {}
+                //}
+                self.tool = tool.into();
             }
-            Message::SetColor(color) => world.active_color = color,
+            Message::SetColor(color) => self.active_color = color,
             Message::Clear => {
-                world.curves = vec![];
-                world.cache.clear();
+                self.curves = vec![];
+                self.cache.clear();
             }
+            Message::DemoMessage => {}
         }
     }
 
@@ -126,7 +165,7 @@ impl World {
             &self.cache,
         )
         .pan(Message::Pan)
-        .on_press(Message::SetTool(Tool::Draw))
+        .on_press(Message::MouseDown)
         .on_release(Message::MouseUp)
         .on_move(Message::Move);
 
@@ -139,14 +178,26 @@ impl World {
                 .into()
         });
 
-        let tools = row!(
-            button("Erase").on_press(Message::SetTool(Tool::Erase)),
-            button("Pen").on_press(Message::SetTool(Tool::Draw)),
+        let pen = radio(
+            "Pen",
+            SelectedTool::Pen,
+            Some(self.tool.into()),
+            Message::SetTool,
+        );
+        let erase = radio(
+            "Erase",
+            SelectedTool::Erase,
+            Some(self.tool.into()),
+            Message::SetTool,
+        );
+
+        let tools = column!(
+            row!(pen, erase).spacing(10.),
             button("Clear").on_press(Message::Clear)
         )
         .spacing(10.)
-        .padding(10.)
-        .wrap();
+        .padding(10.);
+        //.wrap();
 
         let content: Element<Message> = stack!(
             workspace,

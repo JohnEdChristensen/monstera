@@ -1,4 +1,3 @@
-//! This example showcases a simple native custom widget that draws a circle.
 use glam::Vec3;
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::widget::{tree, Tree};
@@ -26,9 +25,9 @@ where
     cache: &'a Cache<Renderer>,
     pan: Option<Box<dyn Fn(Vector) -> Message + 'a>>,
     zoom: Option<Box<dyn Fn(f32) -> Message + 'a>>,
-    on_press: Option<Message>,
+    on_press: Option<Box<dyn Fn(Point) -> Message + 'a>>,
     on_move: Option<Box<dyn Fn(Point) -> Message + 'a>>,
-    on_release: Option<Message>,
+    on_release: Option<Box<dyn Fn(Point) -> Message + 'a>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -71,8 +70,8 @@ where
         self
     }
 
-    pub fn on_press(mut self, on_press: Message) -> Self {
-        self.on_press = Some(on_press);
+    pub fn on_press(mut self, on_press: impl Fn(Point) -> Message + 'a) -> Self {
+        self.on_press = Some(Box::new(on_press));
         self
     }
 
@@ -81,8 +80,8 @@ where
         self
     }
 
-    pub fn on_release(mut self, on_release: Message) -> Self {
-        self.on_release = Some(on_release);
+    pub fn on_release(mut self, on_release: impl Fn(Point) -> Message + 'a) -> Self {
+        self.on_release = Some(Box::new(on_release));
         self
     }
 }
@@ -200,40 +199,31 @@ where
             })
             .fold(event_status, event::Status::merge);
 
-        match event_status {
-            event::Status::Ignored => match (event.clone(), cursor.position()) {
-                (
-                    Event::Mouse(ButtonPressed(mouse::Button::Left))
-                    | Event::Touch(FingerPressed { .. }),
-                    Some(_),
-                ) => {
-                    if let Some(on_press) = self.on_press.clone() {
-                        shell.publish(on_press);
+        match (event_status, cursor.position()) {
+            (event::Status::Ignored, Some(cursor_position)) => match event.clone() {
+                Event::Mouse(ButtonPressed(mouse::Button::Left))
+                | Event::Touch(FingerPressed { .. }) => {
+                    if let Some(on_press) = &self.on_press {
+                        shell.publish(on_press(cursor_position));
                     }
                     event::Status::Captured
                 }
-                (
-                    Event::Mouse(ButtonReleased(mouse::Button::Left))
-                    | Event::Touch(FingerLifted { .. })
-                    | Event::Touch(FingerLost { .. }),
-                    _,
-                ) => {
-                    if let Some(on_release) = self.on_release.clone() {
-                        shell.publish(on_release);
+                Event::Mouse(ButtonReleased(mouse::Button::Left))
+                | Event::Touch(FingerLifted { .. })
+                | Event::Touch(FingerLost { .. }) => {
+                    if let Some(on_release) = &self.on_release {
+                        shell.publish(on_release(cursor_position));
                     }
                     event::Status::Captured
                 }
 
-                (
-                    Event::Mouse(CursorMoved { .. }) | Event::Touch(FingerMoved { .. }),
-                    Some(cursor_position),
-                ) => {
+                Event::Mouse(CursorMoved { .. }) | Event::Touch(FingerMoved { .. }) => {
                     if let Some(on_move) = &self.on_move {
                         shell.publish(on_move(cursor_position));
                     }
                     event::Status::Captured
                 }
-                (Event::Mouse(WheelScrolled { delta }), _) => {
+                Event::Mouse(WheelScrolled { delta }) => {
                     if let Some(pan) = &self.pan {
                         match delta {
                             ScrollDelta::Lines { x, y } => shell.publish(pan(Vector::new(x, y))),
