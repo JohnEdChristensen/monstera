@@ -7,6 +7,8 @@ use iced::widget::{
 };
 use iced::{Alignment, Length, Vector};
 use iced::{Color, Element, Point, Theme};
+use iced_wgpu::Renderer;
+use iced_winit::runtime::{Program, Task};
 use style::color_button;
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
@@ -61,7 +63,7 @@ pub struct World {
     curves: Vec<Curve>,
     camera: Vec3,
     tool: Tool,
-    cache: Cache,
+    cache: Cache<iced_wgpu::Renderer>,
     active_color: Color,
     colors: Vec<Color>, //curve_demo: curve_demo::State,
 }
@@ -88,8 +90,12 @@ impl Default for World {
         }
     }
 }
-impl World {
-    pub fn update(&mut self, message: Message) {
+impl Program for World {
+    type Theme = Theme;
+    type Message = Message;
+    type Renderer = Renderer;
+
+    fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Pan(delta) => {
                 self.camera += Vec3::new(-delta.x * 1.5, -delta.y * 1.5, 0.);
@@ -149,15 +155,16 @@ impl World {
                 self.cache.clear();
             }
             Message::DemoMessage => {}
-        }
+        };
+        Task::none()
     }
 
-    pub fn view(&self) -> Element<Message> {
+    fn view(&self) -> Element<'_, Message, iced::Theme, iced_wgpu::Renderer> {
         //mouse_area(text("hi!")).into()
         //text("hi!").into()
         //let demo = self.curve_demo.view();
         //
-        let workspace = workspace::workspace(
+        let workspace = workspace::workspace::<Message, iced::Theme, iced_wgpu::Renderer>(
             &self.camera,
             &self.curves,
             //vec![(demo.0, demo.1.map(|_| Message::DemoMessage))],
@@ -199,7 +206,7 @@ impl World {
         .padding(10.);
         //.wrap();
 
-        let content: Element<Message> = stack!(
+        let content: Element<Message, iced::Theme, iced_wgpu::Renderer> = stack!(
             workspace,
             column!(row!(
                 horizontal_space(),
@@ -216,6 +223,11 @@ impl World {
         .into();
         content
         //.explain(Color::BLACK)
+    }
+}
+impl World {
+    pub fn background_color(&self) -> Color {
+        Color::BLACK
     }
 }
 
