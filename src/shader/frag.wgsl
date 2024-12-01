@@ -8,7 +8,7 @@ fn gradientNoise(uv: vec2<f32>) -> f32 {
     return fract(52.9829189 * fract(dot(uv, vec2<f32>(0.06711056, 0.00583715))));
 }
 
-const left_color = vec4<f32>(0.02, 0.035, 0.035, 1.0);
+const left_color = vec4<f32>(0.02, 0.04, 0.04, 1.0);
 const right_color = vec4<f32>(0.015, 0.025, 0.025, 1.0);
 const noise_strength = 2.0;
 

@@ -62,7 +62,7 @@ pub enum Message {
 pub struct World {
     curves: Vec<Curve>,
     camera: Vec3,
-    tool: Tool,
+    pub tool: Tool,
     cache: Cache<iced_wgpu::Renderer>,
     active_color: Color,
     colors: Vec<Color>, //curve_demo: curve_demo::State,
@@ -101,6 +101,7 @@ impl Program for World {
                 self.camera += Vec3::new(-delta.x * 1.5, -delta.y * 1.5, 0.);
                 self.cache.clear();
             }
+
             Message::Zoom(delta) => {
                 self.camera += Vec3::new(0., 0., delta);
                 self.cache.clear();
@@ -143,10 +144,6 @@ impl Program for World {
                 _ => (),
             },
             Message::SetTool(tool) => {
-                //#[allow(clippy::single_match)]
-                //match tool {
-                //    Tool::Pen(false) =>                     _ => {}
-                //}
                 self.tool = tool.into();
             }
             Message::SetColor(color) => self.active_color = color,
@@ -160,10 +157,7 @@ impl Program for World {
     }
 
     fn view(&self) -> Element<'_, Message, iced::Theme, iced_wgpu::Renderer> {
-        //mouse_area(text("hi!")).into()
-        //text("hi!").into()
         //let demo = self.curve_demo.view();
-        //
         let workspace = workspace::workspace::<Message, iced::Theme, iced_wgpu::Renderer>(
             &self.camera,
             &self.curves,
@@ -204,7 +198,6 @@ impl Program for World {
         )
         .spacing(10.)
         .padding(10.);
-        //.wrap();
 
         let content: Element<Message, iced::Theme, iced_wgpu::Renderer> = stack!(
             workspace,

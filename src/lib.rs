@@ -1,3 +1,4 @@
+pub mod bench;
 pub mod curve;
 pub mod wayland;
 pub mod widgets;
